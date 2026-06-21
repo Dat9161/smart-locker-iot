@@ -1,0 +1,32 @@
+# ==================== .NET Backend ====================
+bin/
+obj/
+*.user
+*.suo
+.vs/
+appsettings.Development.json
+appsettings.Production.json
+
+# ==================== ESP32 / Arduino ====================
+.pio/
+.pioenvs/
+.piolibdeps/
+*.elf
+*.bin
+*.hex
+
+# ==================== Frontend ====================
+node_modules/
+
+# ==================== Docker ====================
+.env
+
+# ==================== OS ====================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==================== IDE ====================
+.vscode/settings.json
+.idea/
+*.swp
