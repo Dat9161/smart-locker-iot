@@ -1,39 +1,19 @@
 const STORAGE_KEYS = {
   token: "smartLockerToken",
-  user: "smartLockerUser",
-  lockers: "smartLockerLockers",
-  history: "smartLockerHistory"
+  user: "smartLockerUser"
 };
 
 const API_CONFIG = {
-  baseUrl: "http://localhost:5000",
+  baseUrl: "http://localhost:5167",
   endpoints: {
     login: "/api/auth/login",
     lockers: "/api/lockers",
     rentLocker: "/api/lockers/rent",
-    history: "/api/history"
+    history: "/api/lockers/history"
   }
 };
 
-const INITIAL_LOCKERS = [
-  { id: 1, name: "Tủ 01", status: "available", location: "Khu A - Tầng 1" },
-  { id: 2, name: "Tủ 02", status: "occupied", location: "Khu A - Tầng 1" },
-  { id: 3, name: "Tủ 03", status: "available", location: "Khu A - Tầng 1" },
-  { id: 4, name: "Tủ 04", status: "available", location: "Khu A - Tầng 2" },
-  { id: 5, name: "Tủ 05", status: "occupied", location: "Khu B - Tầng 1" },
-  { id: 6, name: "Tủ 06", status: "available", location: "Khu B - Tầng 1" },
-  { id: 7, name: "Tủ 07", status: "available", location: "Khu B - Tầng 2" },
-  { id: 8, name: "Tủ 08", status: "occupied", location: "Khu C - Tầng 1" }
-];
-
-const INITIAL_HISTORY = [
-  { renterName: "Nguyen Van A", lockerNumber: "Tủ 02", rentedAt: "08:15" },
-  { renterName: "Tran Thi B", lockerNumber: "Tủ 05", rentedAt: "09:40" },
-  { renterName: "Le Minh C", lockerNumber: "Tủ 08", rentedAt: "10:05" }
-];
-
 document.addEventListener("DOMContentLoaded", () => {
-  initializeMockStorage();
   bindLogoutButtons();
 
   const pageName = getCurrentPageName();
@@ -257,7 +237,7 @@ function renderLockerGrid(lockers, container, onRentClick) {
       >
         <span class="locker-number">${locker.name}</span>
         <span class="locker-status">${statusText}</span>
-        <div class="locker-meta">${locker.location}</div>
+        <div class="locker-meta">${locker.location ?? ""}</div>
       </button>
     `;
   }).join("");
@@ -296,106 +276,68 @@ function showToast(toastInstance, message, type) {
   toastInstance.show();
 }
 
-function getStoredLockers() {
-  return JSON.parse(localStorage.getItem(STORAGE_KEYS.lockers) || "[]");
-}
-
-function setStoredLockers(lockers) {
-  localStorage.setItem(STORAGE_KEYS.lockers, JSON.stringify(lockers));
-}
-
-function getStoredHistory() {
-  return JSON.parse(localStorage.getItem(STORAGE_KEYS.history) || "[]");
-}
-
-function setStoredHistory(history) {
-  localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
-}
-
-function formatTime(date = new Date()) {
-  return date.toLocaleTimeString("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit"
+// Helper: gọi API với JWT token
+async function apiFetch(endpoint, options = {}) {
+  const token = localStorage.getItem(STORAGE_KEYS.token);
+  const res = await fetch(API_CONFIG.baseUrl + endpoint, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers
+    }
   });
+
+  if (res.status === 401) {
+    localStorage.removeItem(STORAGE_KEYS.token);
+    localStorage.removeItem(STORAGE_KEYS.user);
+    window.location.href = "index.html";
+    throw new Error("Phiên đăng nhập hết hạn.");
+  }
+
+  const data = res.status !== 204 ? await res.json() : null;
+
+  if (!res.ok) {
+    throw new Error(data?.message || "Có lỗi xảy ra.");
+  }
+
+  return data;
 }
 
-function delay(ms = 350) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
-
-/*
-  Các hàm fetch mock được đóng gói thành object API riêng.
-  Khi backend thật sẵn sàng, chỉ cần thay phần mock bằng fetch(API_CONFIG.baseUrl + endpoint).
-*/
 const authApi = {
   async login(credentials) {
-    await delay();
-
-    if (credentials.username === "student01" && credentials.password === "123456") {
-      return {
-        token: "mock-jwt-token-smart-locker",
-        user: {
-          username: credentials.username,
-          fullName: "Sinh vien demo"
-        }
-      };
-    }
-
-    throw new Error("Sai username hoặc password.");
+    const data = await apiFetch(API_CONFIG.endpoints.login, {
+      method: "POST",
+      body: JSON.stringify(credentials)
+    });
+    return {
+      token: data.data.token,
+      user: { fullName: data.data.fullName, userId: data.data.userId }
+    };
   }
 };
 
 const lockerApi = {
   async getLockers() {
-    await delay(200);
-    return getStoredLockers();
+    const data = await apiFetch(API_CONFIG.endpoints.lockers);
+    return data.data;
   },
 
   async rentLocker({ lockerId }) {
-    await delay(500);
-
-    const lockers = getStoredLockers();
-    const lockerIndex = lockers.findIndex((locker) => locker.id === lockerId);
-
-    if (lockerIndex === -1) {
-      throw new Error("Không tìm thấy tủ cần thuê.");
-    }
-
-    if (lockers[lockerIndex].status !== "available") {
-      throw new Error("Tủ này hiện không còn trống.");
-    }
-
-    lockers[lockerIndex].status = "occupied";
-    setStoredLockers(lockers);
-
-    const currentUser = JSON.parse(localStorage.getItem(STORAGE_KEYS.user) || "{}");
-    const history = getStoredHistory();
-
-    history.unshift({
-      renterName: currentUser.fullName || currentUser.username || "Người dùng",
-      lockerNumber: lockers[lockerIndex].name,
-      rentedAt: formatTime()
-    });
-    setStoredHistory(history);
-
-    /*
-      Request giả lập tương ứng backend thật sau này:
-      POST /api/lockers/rent
-      Body: { lockerId: ID_cua_tu }
-    */
-    return {
-      endpoint: `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.rentLocker}`,
+    return await apiFetch(API_CONFIG.endpoints.rentLocker, {
       method: "POST",
-      message: "Tủ đang mở, vui lòng ra tủ."
-    };
+      body: JSON.stringify({ lockerId })
+    });
   }
 };
 
 const historyApi = {
   async getHistory() {
-    await delay(180);
-    return getStoredHistory();
+    const data = await apiFetch(API_CONFIG.endpoints.history);
+    return data.data.map(item => ({
+      renterName: "Bạn",
+      lockerNumber: item.lockerName,
+      rentedAt: new Date(item.rentedAt).toLocaleString("vi-VN")
+    }));
   }
 };
