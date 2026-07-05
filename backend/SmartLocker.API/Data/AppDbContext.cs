@@ -40,16 +40,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(r => r.Locker).WithMany(l => l.RentalHistories).HasForeignKey(r => r.LockerId);
         });
 
-        // Seed data: 6 lockers (giá trị cố định)
+        // Seed data: 2 lockers (giá trị cố định)
         var seedDate = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
         modelBuilder.Entity<Locker>().HasData(
-            new Locker { Id = 1, Name = "Tủ A1", Status = "available", UpdatedAt = seedDate },
-            new Locker { Id = 2, Name = "Tủ A2", Status = "available", UpdatedAt = seedDate },
-            new Locker { Id = 3, Name = "Tủ A3", Status = "available", UpdatedAt = seedDate },
-            new Locker { Id = 4, Name = "Tủ B1", Status = "available", UpdatedAt = seedDate },
-            new Locker { Id = 5, Name = "Tủ B2", Status = "available", UpdatedAt = seedDate },
-            new Locker { Id = 6, Name = "Tủ B3", Status = "available", UpdatedAt = seedDate }
+            new Locker { Id = 1, Name = "Tủ 1", Status = "available", UpdatedAt = seedDate },
+            new Locker { Id = 2, Name = "Tủ 2", Status = "available", UpdatedAt = seedDate }
         );
     }
 }

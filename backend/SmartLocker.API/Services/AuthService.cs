@@ -20,6 +20,24 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
         return new LoginResponse { Token = token, FullName = user.FullName, UserId = user.Id };
     }
 
+    public async Task<(bool Success, string Message)> RegisterAsync(RegisterRequest request)
+    {
+        var exists = await db.Users.AnyAsync(u => u.Username == request.Username);
+        if (exists)
+            return (false, "Tên đăng nhập đã tồn tại.");
+
+        db.Users.Add(new Models.User
+        {
+            Username = request.Username,
+            Password = BCrypt.Net.BCrypt.HashPassword(request.Password),
+            FullName = request.FullName,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await db.SaveChangesAsync();
+        return (true, "Đăng ký thành công.");
+    }
+
     private string GenerateJwt(int userId, string username)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]!));

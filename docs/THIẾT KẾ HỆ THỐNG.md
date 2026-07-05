@@ -15,75 +15,60 @@
                                                        ▼
                                             ┌──────────────────────┐
                                             │     SQL SERVER       │
-                                            │     (Database)       │
+                                            │  (SQL Server 2025    │
+                                            │     Express)         │
                                             └──────────────────────┘
 ```
 
 **Luồng hoạt động chính:**
-1. Người dùng đăng nhập → chọn tủ → thuê tủ qua Web
-2. Server xử lý yêu cầu → lưu DB → tạo lệnh `pending`
+1. Người dùng đăng ký / đăng nhập → nhận JWT token
+2. Chọn tủ → thuê tủ qua Web → server tạo lệnh `pending`
 3. ESP32 polling server mỗi 2 giây → nhận lệnh → mở servo
 4. Sau 15 giây → servo đóng → ESP32 báo `done` về server
 5. Server cập nhật trạng thái → DB ghi lại lịch sử
+6. Người dùng có thể trả tủ thủ công qua web nếu cần
 
 ---
 
 ## 2. CÔNG NGHỆ SỬ DỤNG
 
 ### 2.1 Backend
-| Hạng mục | Công nghệ | Phiên bản | Ghi chú |
-|---|---|---|---|
-| Framework | **ASP.NET Core Web API** | .NET 8 | RESTful API |
-| Ngôn ngữ | **C#** | C# 12 | |
-| ORM | **Entity Framework Core** | 8.x | Code-first migration |
-| Authentication | **JWT Bearer Token** | | Xác thực người dùng |
-| API Docs | **Swagger / OpenAPI** | | Test & document API |
-| Serialization | **System.Text.Json** | | JSON response cho ESP32 |
+| Hạng mục | Công nghệ | Phiên bản |
+|---|---|---|
+| Framework | ASP.NET Core Web API | .NET 10 |
+| Ngôn ngữ | C# | C# 13 |
+| ORM | Entity Framework Core | 9.x |
+| Authentication | JWT Bearer Token | |
+| API Docs | Scalar UI (OpenAPI) | |
+| Password Hash | BCrypt.Net-Next | 4.0.3 |
 
 ### 2.2 Database
-| Hạng mục | Công nghệ | Ghi chú |
-|---|---|---|
-| DBMS | **SQL Server** | SQL Server 2022 |
-| Quản lý schema | **EF Core Migrations** | Code-first |
-| Công cụ quản lý | **SSMS / Azure Data Studio** | |
+| Hạng mục | Công nghệ |
+|---|---|
+| DBMS | SQL Server 2025 Express |
+| Quản lý schema | EF Core Migrations (Code-first) |
+| Công cụ quản lý | SSMS 22 |
 
 ### 2.3 Frontend
-| Hạng mục | Công nghệ | Ghi chú |
-|---|---|---|
-| Ngôn ngữ | **HTML5, CSS3, JavaScript (ES6+)** | Không dùng framework |
-| Gọi API | **Fetch API** | Tích hợp sẵn trong browser |
-| Lưu session | **localStorage** | Lưu JWT token |
-| CSS Framework | **Bootstrap 5** | Responsive nhanh |
+| Hạng mục | Công nghệ |
+|---|---|
+| Ngôn ngữ | HTML5, CSS3, JavaScript (ES6+) |
+| Gọi API | Fetch API |
+| Lưu session | localStorage (JWT token) |
+| CSS Framework | Bootstrap 5.3 |
+| Serve | Static files qua ASP.NET Core |
 
 ### 2.4 Phần cứng (ESP32)
-| Hạng mục | Công nghệ | Ghi chú |
-|---|---|---|
-| Vi điều khiển | **ESP32** | WiFi + Bluetooth tích hợp |
-| Ngôn ngữ lập trình | **C++ (Arduino Framework)** | |
-| IDE | **Arduino IDE** hoặc **PlatformIO** | |
-| HTTP Client | **HTTPClient library** | Gọi REST API |
-| JSON Parser | **ArduinoJson library** | Parse response từ server |
-| Actuator | **Servo Motor (SG90)** | Điều khiển đóng/mở tủ |
-| Kết nối mạng | **WiFi (802.11 b/g/n)** | Kết nối qua HTTP |
-
-### 2.5 Triển khai (DevOps)
-| Hạng mục | Công nghệ | Ghi chú |
-|---|---|---|
-| Containerization | **Docker** | Đóng gói ứng dụng |
-| Orchestration | **Docker Compose** | Quản lý app + DB container |
-| Cloud | **Azure Virtual Machine** | Chạy trên Ubuntu Server |
-| OS Server | **Ubuntu 22.04 LTS** | Chạy trên Azure VM |
-| Reverse Proxy | **Nginx** | Forward traffic vào container |
-
-### 2.6 Công cụ phát triển chung
-| Hạng mục | Công nghệ | Ghi chú |
-|---|---|---|
-| IDE Backend | **Visual Studio 2022** hoặc **VS Code** | |
-| IDE Frontend | **VS Code** | |
-| IDE ESP32 | **Arduino IDE 2.x** | |
-| API Testing | **Postman** | Test tất cả endpoint |
-| Version Control | **Git + GitHub** | Quản lý source code |
-| Git Workflow | **Feature Branch** | Mỗi người 1 nhánh |
+| Hạng mục | Công nghệ |
+|---|---|
+| Vi điều khiển | ESP32 Dev Module |
+| Ngôn ngữ | C++ (Arduino Framework) |
+| IDE | Arduino IDE 2.x |
+| HTTP Client | HTTPClient library |
+| JSON Parser | ArduinoJson 7.x |
+| Actuator | Servo Motor SG90 × 2 (GPIO 13, 12) |
+| LED trạng thái | LED xanh (GPIO 2), LED đỏ (GPIO 4) |
+| Kết nối mạng | WiFi STA mode — kết nối vào router |
 
 ---
 
@@ -96,7 +81,7 @@ Users (
     Username    NVARCHAR(50)  NOT NULL UNIQUE,
     Password    NVARCHAR(256) NOT NULL,       -- BCrypt hash
     FullName    NVARCHAR(100) NOT NULL,
-    CreatedAt   DATETIME      DEFAULT GETDATE()
+    CreatedAt   DATETIME2     DEFAULT GETDATE()
 )
 ```
 
@@ -104,9 +89,9 @@ Users (
 ```sql
 Lockers (
     Id          INT           PRIMARY KEY IDENTITY,
-    Name        NVARCHAR(50)  NOT NULL,        -- Ví dụ: "Tủ A1"
+    Name        NVARCHAR(50)  NOT NULL,        -- "Tủ 1", "Tủ 2"
     Status      NVARCHAR(20)  DEFAULT 'available',  -- available | occupied
-    UpdatedAt   DATETIME      DEFAULT GETDATE()
+    UpdatedAt   DATETIME2     DEFAULT GETDATE()
 )
 ```
 
@@ -117,19 +102,19 @@ Commands (
     LockerId    INT           FOREIGN KEY → Lockers(Id),
     Action      NVARCHAR(20)  NOT NULL,        -- open | close
     Status      NVARCHAR(20)  DEFAULT 'pending',  -- pending | done
-    CreatedAt   DATETIME      DEFAULT GETDATE(),
-    ExecutedAt  DATETIME      NULL
+    CreatedAt   DATETIME2     DEFAULT GETDATE(),
+    ExecutedAt  DATETIME2     NULL
 )
 ```
 
-### Bảng `RentalHistory`
+### Bảng `RentalHistories`
 ```sql
-RentalHistory (
+RentalHistories (
     Id          INT           PRIMARY KEY IDENTITY,
     UserId      INT           FOREIGN KEY → Users(Id),
     LockerId    INT           FOREIGN KEY → Lockers(Id),
-    RentedAt    DATETIME      DEFAULT GETDATE(),
-    ReturnedAt  DATETIME      NULL,
+    RentedAt    DATETIME2     DEFAULT GETDATE(),
+    ReturnedAt  DATETIME2     NULL,
     Status      NVARCHAR(20)  DEFAULT 'active'   -- active | completed
 )
 ```
@@ -139,48 +124,52 @@ RentalHistory (
 ## 4. THIẾT KẾ API
 
 ### Auth
-| Method | Endpoint | Mô tả | Dùng bởi |
+| Method | Endpoint | Mô tả | Auth |
 |---|---|---|---|
-| POST | `/api/auth/login` | Đăng nhập, trả về JWT token | Frontend |
+| POST | `/api/auth/login` | Đăng nhập, trả JWT token | ❌ |
+| POST | `/api/auth/register` | Đăng ký tài khoản mới | ❌ |
 
 ### Lockers
-| Method | Endpoint | Mô tả | Dùng bởi |
+| Method | Endpoint | Mô tả | Auth |
 |---|---|---|---|
-| GET | `/api/lockers` | Lấy danh sách tủ + trạng thái | Frontend |
-| POST | `/api/lockers/rent` | Thuê tủ, tạo pending command | Frontend |
-| GET | `/api/lockers/history` | Lịch sử thuê tủ của user | Frontend |
+| GET | `/api/lockers` | Lấy danh sách tủ + trạng thái | ✅ JWT |
+| POST | `/api/lockers/rent` | Thuê tủ, tạo pending command | ✅ JWT |
+| POST | `/api/lockers/return` | Trả tủ thủ công | ✅ JWT |
+| GET | `/api/lockers/history` | Lịch sử thuê tủ của user | ✅ JWT |
 
 ### Commands (ESP32)
-| Method | Endpoint | Mô tả | Dùng bởi |
+| Method | Endpoint | Mô tả | Auth |
 |---|---|---|---|
-| GET | `/api/command/pending/{lockerId}` | Lấy lệnh chờ | ESP32 |
-| POST | `/api/command/done/{id}` | Xác nhận đã thực thi | ESP32 |
+| GET | `/api/command/pending/{lockerId}` | ESP32 polling lệnh chờ | ❌ |
+| POST | `/api/command/done/{id}` | ESP32 xác nhận đã thực thi | ❌ |
 
-### Response mẫu cho ESP32
+### Response mẫu
 ```json
 // GET /api/command/pending/1 → Có lệnh
-{
-  "id": 5,
-  "lockerId": 1,
-  "action": "open"
-}
+{ "id": 5, "lockerId": 1, "action": "open" }
 
 // GET /api/command/pending/1 → Không có lệnh
 HTTP 204 No Content
+
+// Thành công
+{ "success": true, "data": { ... } }
+
+// Thất bại
+{ "success": false, "message": "Lý do lỗi" }
 ```
 
 ---
 
 ## 5. LUỒNG XỬ LÝ CHI TIẾT
 
-### Luồng thuê tủ (Happy Path)
+### Luồng thuê tủ
 ```
 Frontend          Server              Database           ESP32
    │                 │                    │                 │
    ├─POST /rent──────►│                    │                 │
-   │                 ├─Check locker status►│                 │
+   │                 ├─Check locker────── ►│                 │
    │                 │◄─available──────────┤                 │
-   │                 ├─Insert Command──────►│                 │
+   │                 ├─Insert Command──────►│                │
    │                 ├─Update Locker=occupied►│              │
    │                 ├─Insert RentalHistory►│                │
    │◄─200 OK─────────┤                    │                 │
@@ -202,85 +191,75 @@ Frontend          Server              Database           ESP32
 
 ### Backend (.NET)
 ```
-SmartLocker.API/
+backend/SmartLocker.API/
 ├── Controllers/
-│   ├── AuthController.cs
-│   ├── LockersController.cs
-│   └── CommandController.cs
+│   ├── AuthController.cs         -- POST /login, /register
+│   ├── LockersController.cs      -- GET, POST /rent, /return, /history
+│   └── CommandController.cs      -- GET /pending, POST /done
 ├── Services/
-│   ├── IAuthService.cs / AuthService.cs
-│   ├── ILockerService.cs / LockerService.cs
-│   └── ICommandService.cs / CommandService.cs
+│   ├── AuthService.cs / IAuthService.cs
+│   ├── LockerService.cs / ILockerService.cs
+│   └── CommandService.cs / ICommandService.cs
 ├── Models/
-│   ├── User.cs
-│   ├── Locker.cs
-│   ├── Command.cs
-│   └── RentalHistory.cs
+│   ├── User.cs / Locker.cs / Command.cs / RentalHistory.cs
 ├── DTOs/
-│   ├── LoginRequest.cs / LoginResponse.cs
-│   ├── RentRequest.cs
-│   └── CommandDto.cs
+│   ├── LoginRequest/Response, RegisterRequest
+│   ├── RentRequest, CommandDto, LockerDto, RentalHistoryDto
+│   └── ApiResponse.cs
 ├── Data/
-│   └── AppDbContext.cs
-├── Dockerfile
-└── appsettings.json
+│   ├── AppDbContext.cs
+│   └── DbSeeder.cs               -- Seed admin user lúc startup
+├── Migrations/
+└── Program.cs
 ```
 
 ### Frontend
 ```
 frontend/
-├── index.html          (trang đăng nhập)
-├── lockers.html        (danh sách tủ)
-├── history.html        (lịch sử)
-├── css/
-│   └── style.css
-└── js/
-    ├── api.js          (các hàm gọi API)
-    ├── auth.js
-    ├── lockers.js
-    └── history.js
+├── index.html      -- Đăng nhập / Đăng ký (2 tab)
+├── dashboard.html  -- Danh sách tủ + thuê / trả tủ
+├── history.html    -- Lịch sử thuê
+├── app.js          -- Logic + API calls (Fetch API thật)
+└── style.css       -- Dark theme, responsive
 ```
 
 ### ESP32
 ```
-esp32/
-└── smart_locker.ino    (1 file Arduino duy nhất)
-    ├── WiFi setup
-    ├── polling loop()
-    ├── parseCommand()
-    └── controlServo()
+esp32/smart_locker/
+└── smart_locker.ino
+    ├── connectWiFi()         -- STA mode, auto reconnect
+    ├── getPendingCommand()   -- GET /api/command/pending/{id}
+    ├── markCommandDone()     -- POST /api/command/done/{id}
+    └── executeOpenCommand()  -- servo mở → delay 15s → đóng → báo done
 ```
 
 ---
 
-## 7. QUY ƯỚC CHUNG CỦA NHÓM
+## 7. CẤU HÌNH MẠNG (LOCAL)
 
-### API Response format chuẩn
-```json
-// Thành công
-{ "success": true, "data": { ... } }
+| Service | Địa chỉ |
+|---|---|
+| Backend API | `http://0.0.0.0:5167` |
+| Frontend (qua backend) | `http://localhost:5167/app/index.html` |
+| Scalar API Docs | `http://localhost:5167/scalar/v1` |
+| SQL Server | `localhost\SQLEXPRESS` |
+| WiFi chung | `He` (ESP32 + máy tính cùng mạng) |
+| IP máy tính | `172.20.10.2` (ESP32 gọi vào đây) |
 
-// Thất bại
-{ "success": false, "message": "Lý do lỗi" }
-```
+---
+
+## 8. QUY ƯỚC NHÓM
 
 ### Git Branch
 ```
-main          ← nhánh chính, chỉ merge khi ổn định
-dev           ← nhánh tích hợp
-feature/tv1   ← TV1 làm việc
-feature/tv2   ← TV2 làm việc
-feature/tv3   ← TV3 làm việc
-feature/tv4   ← TV4 làm việc
+main              ← nhánh chính
+feature/tv1       ← Backend core + Database
+feature/tv2       ← IoT API + DevOps
+lehoaibao-fondend ← Frontend
+feature/tv3       ← ESP32
 ```
 
-### Port mặc định (local)
-| Service | Port |
-|---|---|
-| Backend API | `5000` |
-| SQL Server | `1433` |
-| Frontend | Mở trực tiếp file HTML hoặc Live Server |
-
----
-
-> **Lưu ý:** Tài liệu này là chuẩn chung của cả nhóm. Mọi thay đổi về công nghệ hoặc thiết kế cần được nhóm thống nhất trước khi áp dụng.
+### Tài khoản mặc định (seed)
+| Username | Password | Vai trò |
+|---|---|---|
+| admin | admin123 | Quản trị viên |

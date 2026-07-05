@@ -37,6 +37,21 @@ public class LockerService(AppDbContext db) : ILockerService
         return (true, "Thuê tủ thành công.");
     }
 
+    public async Task<(bool Success, string Message)> ReturnAsync(int lockerId, int userId)
+    {
+        var locker = await db.Lockers.FindAsync(lockerId);
+        if (locker == null)
+            return (false, "Không tìm thấy tủ.");
+        if (locker.Status != "occupied")
+            return (false, "Tủ này chưa được thuê.");
+
+        // Tạo lệnh mở tủ để người dùng lấy đồ ra (action "return" để phân biệt với lệnh thuê)
+        db.Commands.Add(new Command { LockerId = lockerId, Action = "return", Status = "pending" });
+
+        await db.SaveChangesAsync();
+        return (true, "Tủ đang mở, vui lòng lấy đồ ra.");
+    }
+
     public async Task<List<RentalHistoryDto>> GetHistoryAsync(int userId)
     {
         return await db.RentalHistories

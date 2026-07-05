@@ -24,25 +24,32 @@ public class CommandService(AppDbContext db) : ICommandService
         if (cmd == null)
             return (false, "Không tìm thấy lệnh.");
 
+        if (cmd.Status == "done")
+            return (false, "Lệnh này đã được thực thi rồi.");
+
         cmd.Status = "done";
         cmd.ExecutedAt = DateTime.UtcNow;
 
-        // Cập nhật tủ về available và hoàn thành lịch sử thuê
-        cmd.Locker.Status = "available";
-        cmd.Locker.UpdatedAt = DateTime.UtcNow;
-
-        var rental = await db.RentalHistories
-            .Where(r => r.LockerId == cmd.LockerId && r.Status == "active")
-            .OrderByDescending(r => r.RentedAt)
-            .FirstOrDefaultAsync();
-
-        if (rental != null)
+        // Action "return" = lệnh trả tủ → set available + complete rental
+        // Action "open"   = lệnh thuê tủ → tủ vẫn occupied sau khi đóng
+        if (cmd.Action == "return")
         {
-            rental.Status = "completed";
-            rental.ReturnedAt = DateTime.UtcNow;
+            cmd.Locker.Status = "available";
+            cmd.Locker.UpdatedAt = DateTime.UtcNow;
+
+            var rental = await db.RentalHistories
+                .Where(r => r.LockerId == cmd.LockerId && r.Status == "active")
+                .OrderByDescending(r => r.RentedAt)
+                .FirstOrDefaultAsync();
+
+            if (rental != null)
+            {
+                rental.Status = "completed";
+                rental.ReturnedAt = DateTime.UtcNow;
+            }
         }
 
         await db.SaveChangesAsync();
-        return (true, "Đã cập nhật trạng thái lệnh.");
+        return (true, "Đã thực thi lệnh.");
     }
 }

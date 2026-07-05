@@ -3,88 +3,73 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Locker IoT | Đăng nhập</title>
+  <title>Smart Locker | Đăng nhập</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="auth-page">
   <main class="auth-shell">
+
     <section class="auth-hero">
-      <span class="eyebrow">Smart Locker Dashboard</span>
-      <h1>Hệ thống tủ thông minh IoT</h1>
-      <p>
-        Đăng nhập để quản lý trạng thái tủ, thực hiện thuê tủ và xem lịch sử sử dụng
-        theo thời gian thực.
-      </p>
+      <span class="eyebrow">Smart Locker IoT</span>
+      <h1>Hệ thống tủ thông minh</h1>
+      <p>Thuê và quản lý tủ từ xa qua giao diện web. Tủ tự động mở bằng ESP32 khi bạn xác nhận.</p>
       <div class="hero-card">
         <div class="hero-stat">
-          <strong>24</strong>
-          <span>Tủ đang được theo dõi</span>
+          <strong>2</strong>
+          <span>Tủ thông minh</span>
         </div>
         <div class="hero-stat">
           <strong>15s</strong>
-          <span>Chu kỳ tự đóng dự kiến</span>
+          <span>Tự đóng sau</span>
         </div>
         <div class="hero-stat">
-          <strong>24/7</strong>
-          <span>Theo dõi lịch sử truy cập</span>
+          <strong>IoT</strong>
+          <span>ESP32 + .NET</span>
         </div>
       </div>
     </section>
 
     <section class="auth-panel">
-      <div class="panel-card shadow-lg">
-        <div class="mb-4">
-          <h2 class="panel-title">Đăng nhập hệ thống</h2>
-          <p class="panel-subtitle mb-0">
-            Dùng tài khoản mẫu để vào giao diện quản lý locker.
-          </p>
+      <div class="panel-card">
+
+        <div class="auth-tabs" id="authTabs">
+          <button class="active" id="tabLogin">Đăng nhập</button>
+          <button id="tabRegister">Đăng ký</button>
         </div>
 
-        <form id="loginForm" class="needs-validation" novalidate>
-          <div class="mb-3">
-            <label for="username" class="form-label">Username</label>
-            <input
-              type="text"
-              class="form-control form-control-lg"
-              id="username"
-              placeholder="Nhập username"
-              value="student01"
-              required
-            >
-          </div>
+        <!-- Đăng nhập -->
+        <form id="loginForm" novalidate>
+          <label class="form-label">Username</label>
+          <input class="form-control" type="text" id="loginUsername" placeholder="Nhập username" required>
 
-          <div class="mb-3">
-            <label for="password" class="form-label">Password</label>
-            <input
-              type="password"
-              class="form-control form-control-lg"
-              id="password"
-              placeholder="Nhập password"
-              value="123456"
-              required
-            >
-          </div>
+          <label class="form-label">Mật khẩu</label>
+          <input class="form-control" type="password" id="loginPassword" placeholder="Nhập mật khẩu" required>
 
-          <div class="d-flex justify-content-between align-items-center mb-4">
-            <span class="hint-text">Tài khoản demo: student01 / 123456</span>
-            <span class="badge text-bg-light">Mock API</span>
-          </div>
-
-          <button type="submit" id="loginButton" class="btn btn-primary btn-lg w-100">
-            Đăng nhập
-          </button>
+          <button type="submit" class="btn-primary" id="loginButton">Đăng nhập</button>
+          <div id="loginAlert" class="d-none"></div>
         </form>
 
-        <div id="loginAlert" class="alert d-none mt-4 mb-0" role="alert"></div>
+        <!-- Đăng ký -->
+        <form id="registerForm" novalidate class="d-none">
+          <label class="form-label">Họ và tên</label>
+          <input class="form-control" type="text" id="registerFullName" placeholder="Nhập họ tên" required>
+
+          <label class="form-label">Username</label>
+          <input class="form-control" type="text" id="registerUsername" placeholder="Nhập username" required>
+
+          <label class="form-label">Mật khẩu</label>
+          <input class="form-control" type="password" id="registerPassword" placeholder="Tối thiểu 6 ký tự" required>
+
+          <button type="submit" class="btn-primary" id="registerButton">Tạo tài khoản</button>
+          <div id="registerAlert" class="d-none"></div>
+        </form>
+
       </div>
     </section>
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

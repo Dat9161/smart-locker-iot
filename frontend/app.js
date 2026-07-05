@@ -1,343 +1,263 @@
-const STORAGE_KEYS = {
-  token: "smartLockerToken",
-  user: "smartLockerUser"
-};
+const STORAGE_KEYS = { token: "smartLockerToken", user: "smartLockerUser" };
 
-const API_CONFIG = {
-  baseUrl: "http://localhost:5167",
-  endpoints: {
-    login: "/api/auth/login",
-    lockers: "/api/lockers",
-    rentLocker: "/api/lockers/rent",
-    history: "/api/lockers/history"
-  }
-};
+const API_BASE = "http://localhost:5167";
 
+// ── Bootstrap ────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
-  bindLogoutButtons();
+  bindLogout();
+  const page = location.pathname.split("/").pop().toLowerCase();
 
-  const pageName = getCurrentPageName();
+  if (!page || page === "index.html") { setupLoginPage(); return; }
 
-  if (pageName === "index.html" || pageName === "") {
-    setupLoginPage();
-    return;
+  if (!localStorage.getItem(STORAGE_KEYS.token)) {
+    location.href = "index.html"; return;
   }
 
-  const isAuthorized = protectPrivatePage();
-  if (!isAuthorized) {
-    return;
-  }
-
-  if (pageName === "dashboard.html") {
-    setupDashboardPage();
-  }
-
-  if (pageName === "history.html") {
-    setupHistoryPage();
-  }
+  if (page === "dashboard.html") setupDashboardPage();
+  if (page === "history.html")   setupHistoryPage();
 });
 
-function getCurrentPageName() {
-  const path = window.location.pathname.split("/").pop();
-  return path.toLowerCase();
+// ── Auth ─────────────────────────────────────────────────────
+function setupLoginPage() {
+  if (localStorage.getItem(STORAGE_KEYS.token)) { location.href = "dashboard.html"; return; }
+
+  const tabLogin    = document.getElementById("tabLogin");
+  const tabRegister = document.getElementById("tabRegister");
+  const loginForm   = document.getElementById("loginForm");
+  const regForm     = document.getElementById("registerForm");
+
+  tabLogin.addEventListener("click", () => {
+    tabLogin.classList.add("active"); tabRegister.classList.remove("active");
+    loginForm.classList.remove("d-none"); regForm.classList.add("d-none");
+  });
+
+  tabRegister.addEventListener("click", () => {
+    tabRegister.classList.add("active"); tabLogin.classList.remove("active");
+    regForm.classList.remove("d-none"); loginForm.classList.add("d-none");
+  });
+
+  const loginAlert = document.getElementById("loginAlert");
+  const loginBtn   = document.getElementById("loginButton");
+
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const username = document.getElementById("loginUsername").value.trim();
+    const password = document.getElementById("loginPassword").value.trim();
+    if (!username || !password) { showAlert(loginAlert, "Vui lòng nhập đầy đủ.", "danger"); return; }
+
+    setLoading(loginBtn, true, "Đang đăng nhập...");
+    try {
+      const res = await api.post("/api/auth/login", { username, password });
+      localStorage.setItem(STORAGE_KEYS.token, res.data.token);
+      localStorage.setItem(STORAGE_KEYS.user, JSON.stringify({ fullName: res.data.fullName }));
+      showAlert(loginAlert, "Đăng nhập thành công!", "success");
+      setTimeout(() => location.href = "dashboard.html", 600);
+    } catch (err) {
+      showAlert(loginAlert, err.message, "danger");
+    } finally {
+      setLoading(loginBtn, false, "Đăng nhập");
+    }
+  });
+
+  const regAlert = document.getElementById("registerAlert");
+  const regBtn   = document.getElementById("registerButton");
+
+  regForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fullName = document.getElementById("registerFullName").value.trim();
+    const username = document.getElementById("registerUsername").value.trim();
+    const password = document.getElementById("registerPassword").value.trim();
+    if (!fullName || !username || !password) { showAlert(regAlert, "Vui lòng nhập đầy đủ.", "danger"); return; }
+    if (password.length < 6) { showAlert(regAlert, "Mật khẩu tối thiểu 6 ký tự.", "danger"); return; }
+
+    setLoading(regBtn, true, "Đang đăng ký...");
+    try {
+      await api.post("/api/auth/register", { fullName, username, password });
+      showAlert(regAlert, "Đăng ký thành công! Vui lòng đăng nhập.", "success");
+      setTimeout(() => tabLogin.click(), 1200);
+    } catch (err) {
+      showAlert(regAlert, err.message, "danger");
+    } finally {
+      setLoading(regBtn, false, "Đăng ký");
+    }
+  });
 }
 
-function initializeMockStorage() {
-  if (!localStorage.getItem(STORAGE_KEYS.lockers)) {
-    localStorage.setItem(STORAGE_KEYS.lockers, JSON.stringify(INITIAL_LOCKERS));
+// ── Dashboard ────────────────────────────────────────────────
+async function setupDashboardPage() {
+  let lockers = await api.get("/api/lockers").then(r => r.data);
+  let selectedId = null;
+
+  const grid     = document.getElementById("lockerGrid");
+  const rentModal   = document.getElementById("rentModal");
+  const returnModal = document.getElementById("returnModal");
+
+  function render() {
+    const avail = lockers.filter(l => l.status === "available").length;
+    document.getElementById("totalLockers").textContent     = lockers.length;
+    document.getElementById("availableLockers").textContent = avail;
+    document.getElementById("occupiedLockers").textContent  = lockers.length - avail;
+
+    grid.innerHTML = lockers.map(l => {
+      const isAvail = l.status === "available";
+      return `
+        <div class="locker-card ${isAvail ? "available" : "occupied"}">
+          <span class="locker-icon">${isAvail ? "🔓" : "🔒"}</span>
+          <span class="locker-number">${l.name}</span>
+          <span class="locker-status">${isAvail ? "Đang trống" : "Đang sử dụng"}</span>
+          ${isAvail
+            ? `<button class="btn-action btn-rent" data-id="${l.id}">+ Thuê tủ</button>`
+            : `<button class="btn-action btn-return" data-id="${l.id}">↩ Trả tủ</button>`
+          }
+        </div>`;
+    }).join("");
+
+    grid.querySelectorAll(".btn-rent").forEach(btn =>
+      btn.addEventListener("click", () => {
+        selectedId = Number(btn.dataset.id);
+        document.getElementById("rentLockerName").textContent = lockers.find(l => l.id === selectedId)?.name;
+        showModal(rentModal);
+      })
+    );
+
+    grid.querySelectorAll(".btn-return").forEach(btn =>
+      btn.addEventListener("click", () => {
+        selectedId = Number(btn.dataset.id);
+        document.getElementById("returnLockerName").textContent = lockers.find(l => l.id === selectedId)?.name;
+        showModal(returnModal);
+      })
+    );
   }
 
-  if (!localStorage.getItem(STORAGE_KEYS.history)) {
-    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(INITIAL_HISTORY));
+  render();
+
+  // Rent
+  document.getElementById("rentCancelBtn").addEventListener("click", () => hideModal(rentModal));
+  const rentConfirm = document.getElementById("rentConfirmBtn");
+  rentConfirm.addEventListener("click", async () => {
+    setLoading(rentConfirm, true, "Đang xử lý...");
+    try {
+      await api.post("/api/lockers/rent", { lockerId: selectedId });
+      lockers = lockers.map(l => l.id === selectedId ? { ...l, status: "occupied" } : l);
+      hideModal(rentModal); render();
+      toast("Thuê tủ thành công! Tủ đang mở, vui lòng ra tủ.", "success");
+    } catch (err) {
+      toast(err.message, "error");
+    } finally {
+      setLoading(rentConfirm, false, "Thuê tủ");
+    }
+  });
+
+  // Return
+  document.getElementById("returnCancelBtn").addEventListener("click", () => hideModal(returnModal));
+  const returnConfirm = document.getElementById("returnConfirmBtn");
+  returnConfirm.addEventListener("click", async () => {
+    setLoading(returnConfirm, true, "Đang xử lý...");
+    try {
+      await api.post("/api/lockers/return", { lockerId: selectedId });
+      hideModal(returnModal);
+      toast("Tủ đang mở, vui lòng lấy đồ ra. Tủ sẽ tự đóng sau 15 giây.", "success");
+    } catch (err) {
+      toast(err.message, "error");
+    } finally {
+      setLoading(returnConfirm, false, "Trả tủ");
+    }
+  });
+
+  // Close modal khi click ngoài
+  [rentModal, returnModal].forEach(m => m.addEventListener("click", e => { if (e.target === m) hideModal(m); }));
+}
+
+// ── History ──────────────────────────────────────────────────
+async function setupHistoryPage() {
+  const tbody = document.getElementById("historyTableBody");
+  const count = document.getElementById("historyCount");
+
+  try {
+    const data = await api.get("/api/lockers/history").then(r => r.data);
+    count.textContent = `${data.length} bản ghi`;
+
+    if (data.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:32px">Chưa có lịch sử thuê tủ.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = data.map(item => `
+      <tr>
+        <td><strong>${item.lockerName}</strong></td>
+        <td>${fmt(item.rentedAt)}</td>
+        <td>${item.returnedAt ? fmt(item.returnedAt) : "<span style='color:var(--muted)'>—</span>"}</td>
+        <td><span class="badge-status ${item.status}">${item.status === "completed" ? "Hoàn thành" : "Đang thuê"}</span></td>
+      </tr>`).join("");
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--red);padding:32px">${err.message}</td></tr>`;
   }
 }
 
-function bindLogoutButtons() {
-  const logoutButtons = document.querySelectorAll("#logoutButton");
-
-  logoutButtons.forEach((button) => {
-    button.addEventListener("click", () => {
+// ── Helpers ──────────────────────────────────────────────────
+function bindLogout() {
+  document.querySelectorAll("#logoutButton").forEach(btn =>
+    btn.addEventListener("click", () => {
       localStorage.removeItem(STORAGE_KEYS.token);
       localStorage.removeItem(STORAGE_KEYS.user);
-      sessionStorage.removeItem(STORAGE_KEYS.token);
-      sessionStorage.removeItem(STORAGE_KEYS.user);
-      window.location.href = "index.html";
+      location.href = "index.html";
+    })
+  );
+}
+
+function setLoading(btn, loading, text) {
+  btn.disabled = loading;
+  btn.textContent = text;
+}
+
+function showAlert(el, msg, type) {
+  el.className = `alert alert-${type}`;
+  el.textContent = msg;
+}
+
+function showModal(el) { el.classList.add("show"); }
+function hideModal(el) { el.classList.remove("show"); }
+
+function toast(msg, type = "success") {
+  const wrap = document.getElementById("toastWrap");
+  if (!wrap) return;
+  const el = document.createElement("div");
+  el.className = `toast-item ${type}`;
+  el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function fmt(dateStr) {
+  return new Date(dateStr).toLocaleString("vi-VN", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit"
+  });
+}
+
+// ── API Client ───────────────────────────────────────────────
+const api = {
+  async request(method, path, body) {
+    const token = localStorage.getItem(STORAGE_KEYS.token);
+    const res = await fetch(API_BASE + path, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: body ? JSON.stringify(body) : undefined
     });
-  });
-}
 
-function protectPrivatePage() {
-  const token = localStorage.getItem(STORAGE_KEYS.token);
-
-  if (!token) {
-    window.location.href = "index.html";
-    return false;
-  }
-
-  return true;
-}
-
-function setupLoginPage() {
-  const token = localStorage.getItem(STORAGE_KEYS.token);
-  if (token) {
-    window.location.href = "dashboard.html";
-    return;
-  }
-
-  const loginForm = document.getElementById("loginForm");
-  const loginButton = document.getElementById("loginButton");
-  const loginAlert = document.getElementById("loginAlert");
-
-  if (!loginForm || !loginButton || !loginAlert) {
-    return;
-  }
-
-  loginForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    const username = document.getElementById("username").value.trim();
-    const password = document.getElementById("password").value.trim();
-
-    if (!username || !password) {
-      showAlert(loginAlert, "Vui lòng nhập đầy đủ username và password.", "danger");
-      return;
+    if (res.status === 401) {
+      localStorage.removeItem(STORAGE_KEYS.token);
+      location.href = "index.html";
+      throw new Error("Phiên đăng nhập hết hạn.");
     }
 
-    loginButton.disabled = true;
-    loginButton.textContent = "Đang đăng nhập...";
-
-    try {
-      const response = await authApi.login({ username, password });
-
-      localStorage.setItem(STORAGE_KEYS.token, response.token);
-      localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(response.user));
-
-      showAlert(loginAlert, "Đăng nhập thành công. Đang chuyển hướng...", "success");
-
-      setTimeout(() => {
-        window.location.href = "dashboard.html";
-      }, 700);
-    } catch (error) {
-      showAlert(loginAlert, error.message || "Đăng nhập thất bại.", "danger");
-    } finally {
-      loginButton.disabled = false;
-      loginButton.textContent = "Đăng nhập";
-    }
-  });
-}
-
-async function setupDashboardPage() {
-  const lockerGrid = document.getElementById("lockerGrid");
-  const totalLockers = document.getElementById("totalLockers");
-  const availableLockers = document.getElementById("availableLockers");
-  const occupiedLockers = document.getElementById("occupiedLockers");
-  const selectedLockerLabel = document.getElementById("selectedLockerLabel");
-  const confirmRentButton = document.getElementById("confirmRentButton");
-  const modalElement = document.getElementById("rentLockerModal");
-  const toastElement = document.getElementById("appToast");
-
-  if (!lockerGrid || !confirmRentButton || !modalElement || !toastElement) {
-    return;
-  }
-
-  const rentModal = new bootstrap.Modal(modalElement);
-  const appToast = new bootstrap.Toast(toastElement, { delay: 4200 });
-  let selectedLockerId = null;
-  let lockers = await lockerApi.getLockers();
-
-  const openRentModal = (lockerId) => {
-    const locker = lockers.find((item) => item.id === lockerId);
-    if (!locker) {
-      return;
-    }
-
-    selectedLockerId = locker.id;
-    selectedLockerLabel.textContent = locker.name;
-    rentModal.show();
-  };
-
-  renderLockerGrid(lockers, lockerGrid, openRentModal);
-  updateLockerStats(lockers, { totalLockers, availableLockers, occupiedLockers });
-
-  confirmRentButton.addEventListener("click", async () => {
-    if (!selectedLockerId) {
-      return;
-    }
-
-    confirmRentButton.disabled = true;
-    confirmRentButton.textContent = "Đang xử lý...";
-
-    try {
-      /*
-        Luồng xử lý thuê tủ:
-        1. Người dùng chọn một tủ đang trống trên giao diện.
-        2. Khi xác nhận trong popup, frontend gọi API POST /api/lockers/rent.
-        3. Mock API cập nhật trạng thái tủ sang "occupied" và ghi lịch sử thuê.
-        4. Ngay sau khi API thành công, frontend cập nhật dữ liệu local, đổi màu ô tủ,
-           cập nhật lại bộ đếm và hiện toast thành công mà không cần tải lại trang.
-      */
-      const result = await lockerApi.rentLocker({ lockerId: selectedLockerId });
-      lockers = lockers.map((locker) => {
-        if (locker.id === selectedLockerId) {
-          return { ...locker, status: "occupied" };
-        }
-
-        return locker;
-      });
-
-      rentModal.hide();
-      renderLockerGrid(lockers, lockerGrid, openRentModal);
-      updateLockerStats(lockers, { totalLockers, availableLockers, occupiedLockers });
-      showToast(
-        appToast,
-        "Thuê tủ thành công! Tủ đang mở, vui lòng ra tủ.",
-        "success"
-      );
-      selectedLockerId = null;
-    } catch (error) {
-      showToast(appToast, error.message || "Không thể thuê tủ.", "danger");
-    } finally {
-      confirmRentButton.disabled = false;
-      confirmRentButton.textContent = "Thuê tủ";
-    }
-  });
-}
-
-async function setupHistoryPage() {
-  const historyTableBody = document.getElementById("historyTableBody");
-  const historyCount = document.getElementById("historyCount");
-
-  if (!historyTableBody || !historyCount) {
-    return;
-  }
-
-  const historyItems = await historyApi.getHistory();
-
-  historyTableBody.innerHTML = historyItems.map((item) => `
-    <tr>
-      <td>${item.renterName}</td>
-      <td>${item.lockerNumber}</td>
-      <td>${item.rentedAt}</td>
-    </tr>
-  `).join("");
-
-  historyCount.textContent = `${historyItems.length} bản ghi`;
-}
-
-function renderLockerGrid(lockers, container, onRentClick) {
-  container.innerHTML = lockers.map((locker) => {
-    const isAvailable = locker.status === "available";
-    const statusText = isAvailable ? "Tủ đang trống" : "Đang có người dùng";
-
-    return `
-      <button
-        class="locker-card ${isAvailable ? "available" : "occupied"}"
-        data-locker-id="${locker.id}"
-        ${isAvailable ? "" : "disabled"}
-      >
-        <span class="locker-number">${locker.name}</span>
-        <span class="locker-status">${statusText}</span>
-        <div class="locker-meta">${locker.location ?? ""}</div>
-      </button>
-    `;
-  }).join("");
-
-  container.querySelectorAll(".locker-card.available").forEach((button) => {
-    button.addEventListener("click", () => {
-      const lockerId = Number(button.dataset.lockerId);
-      onRentClick(lockerId);
-    });
-  });
-}
-
-function updateLockerStats(lockers, targets) {
-  const availableCount = lockers.filter((locker) => locker.status === "available").length;
-  const occupiedCount = lockers.length - availableCount;
-
-  targets.totalLockers.textContent = lockers.length;
-  targets.availableLockers.textContent = availableCount;
-  targets.occupiedLockers.textContent = occupiedCount;
-}
-
-function showAlert(element, message, type) {
-  element.className = `alert alert-${type} mt-4 mb-0`;
-  element.textContent = message;
-}
-
-function showToast(toastInstance, message, type) {
-  const toastElement = document.getElementById("appToast");
-  const toastMessage = document.getElementById("toastMessage");
-
-  toastElement.classList.remove("toast-error");
-  if (type === "danger") {
-    toastElement.classList.add("toast-error");
-  }
-  toastMessage.textContent = message;
-  toastInstance.show();
-}
-
-// Helper: gọi API với JWT token
-async function apiFetch(endpoint, options = {}) {
-  const token = localStorage.getItem(STORAGE_KEYS.token);
-  const res = await fetch(API_CONFIG.baseUrl + endpoint, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers
-    }
-  });
-
-  if (res.status === 401) {
-    localStorage.removeItem(STORAGE_KEYS.token);
-    localStorage.removeItem(STORAGE_KEYS.user);
-    window.location.href = "index.html";
-    throw new Error("Phiên đăng nhập hết hạn.");
-  }
-
-  const data = res.status !== 204 ? await res.json() : null;
-
-  if (!res.ok) {
-    throw new Error(data?.message || "Có lỗi xảy ra.");
-  }
-
-  return data;
-}
-
-const authApi = {
-  async login(credentials) {
-    const data = await apiFetch(API_CONFIG.endpoints.login, {
-      method: "POST",
-      body: JSON.stringify(credentials)
-    });
-    return {
-      token: data.data.token,
-      user: { fullName: data.data.fullName, userId: data.data.userId }
-    };
-  }
-};
-
-const lockerApi = {
-  async getLockers() {
-    const data = await apiFetch(API_CONFIG.endpoints.lockers);
-    return data.data;
+    const data = res.status !== 204 ? await res.json() : null;
+    if (!res.ok) throw new Error(data?.message || "Có lỗi xảy ra.");
+    return data;
   },
-
-  async rentLocker({ lockerId }) {
-    return await apiFetch(API_CONFIG.endpoints.rentLocker, {
-      method: "POST",
-      body: JSON.stringify({ lockerId })
-    });
-  }
-};
-
-const historyApi = {
-  async getHistory() {
-    const data = await apiFetch(API_CONFIG.endpoints.history);
-    return data.data.map(item => ({
-      renterName: "Bạn",
-      lockerNumber: item.lockerName,
-      rentedAt: new Date(item.rentedAt).toLocaleString("vi-VN")
-    }));
-  }
+  get:  (path)       => api.request("GET",  path),
+  post: (path, body) => api.request("POST", path, body),
 };

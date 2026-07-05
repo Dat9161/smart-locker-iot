@@ -30,6 +30,18 @@ public class LockersController(ILockerService lockerService) : ControllerBase
         return Ok(new { success = true, message });
     }
 
+    [HttpPost("return")]
+    public async Task<IActionResult> Return([FromBody] RentRequest request)
+    {
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var (success, message) = await lockerService.ReturnAsync(request.LockerId, userId);
+
+        if (!success)
+            return BadRequest(new { success = false, message });
+
+        return Ok(new { success = true, message });
+    }
+
     [HttpGet("history")]
     public async Task<IActionResult> GetHistory()
     {
