@@ -17,7 +17,7 @@ const int LOCKER_ID_2 = 2;
 
 // -- Chan GPIO -------------------------------------------------------
 const int SERVO_PIN_1   = 13;
-const int SERVO_PIN_2   = 14;
+const int SERVO_PIN_2   = 27;
 const int PIN_LED_GREEN = 2;
 const int PIN_LED_RED   = 4;
 
@@ -29,12 +29,14 @@ const int DOOR_OPEN_TIME_MS = 15000;
 
 Servo servo1;
 Servo servo2;
+volatile int openCount = 0;
 
 // -- Ham tien ich ----------------------------------------------------
 
-void setLED(bool isOpen) {
-  digitalWrite(PIN_LED_GREEN, isOpen ? HIGH : LOW);
-  digitalWrite(PIN_LED_RED,   isOpen ? LOW  : HIGH);
+void updateLED() {
+  bool anyOpen = (openCount > 0);
+  digitalWrite(PIN_LED_GREEN, anyOpen ? HIGH : LOW);
+  digitalWrite(PIN_LED_RED,   anyOpen ? LOW  : HIGH);
 }
 
 void connectWiFi() {
@@ -53,7 +55,6 @@ void connectWiFi() {
       ESP.restart();
     }
   }
-
   Serial.println("\nWiFi connected!");
   Serial.print("IP ESP32: ");
   Serial.println(WiFi.localIP());
@@ -75,11 +76,14 @@ int getPendingCommand(int lockerId, String &action) {
     action = doc["action"].as<String>();
     int cmdId = doc["id"].as<int>();
     http.end();
+    Serial.print("Lenh cho [Locker "); Serial.print(lockerId);
+    Serial.print("]: id="); Serial.print(cmdId);
+    Serial.print(" action="); Serial.println(action);
     return cmdId;
   }
 
   http.end();
-  return -1; // 204 = khong co lenh
+  return -1;
 }
 
 void markCommandDone(int commandId) {
@@ -96,30 +100,60 @@ void markCommandDone(int commandId) {
   http.end();
 }
 
-void executeOpenCommand(Servo &servo, int commandId, int lockerId) {
-  Serial.print("Mo tu #"); Serial.println(lockerId);
+// Attach servo chi khi can, detach sau khi xong de tiet kiem dong
+void executeOpenCommand(int servoPin, Servo &servo, int commandId, int lockerId) {
+  Serial.print(">>> Mo tu #"); Serial.println(lockerId);
+
+  // Attach khi can
+  servo.setPeriodHertz(50);
+  servo.attach(servoPin, 500, 2400);
+  delay(100);
+
+  openCount++;
+  updateLED();
+
   servo.write(SERVO_OPEN_DEG);
-  setLED(true);
   delay(DOOR_OPEN_TIME_MS);
   servo.write(SERVO_CLOSE_DEG);
-  setLED(false);
-  Serial.print("Dong tu #"); Serial.println(lockerId);
+  delay(500); // cho servo ve vi tri truoc khi detach
+
+  // Detach sau khi xong: khong con giu PWM, tiet kiem dong ~20mA/servo
+  servo.detach();
+
+  openCount--;
+  updateLED();
+
+  Serial.print("<<< Dong tu #"); Serial.println(lockerId);
   markCommandDone(commandId);
 }
 
 // -- Setup -----------------------------------------------------------
 void setup() {
   Serial.begin(115200);
+  delay(500);
 
   pinMode(PIN_LED_GREEN, OUTPUT);
   pinMode(PIN_LED_RED,   OUTPUT);
-  setLED(false);
+  openCount = 0;
+  updateLED();
 
-  servo1.attach(SERVO_PIN_1);
-  servo2.attach(SERVO_PIN_2);
+  ESP32PWM::allocateTimer(0);
+  ESP32PWM::allocateTimer(1);
+
+  // Di chuyen servo ve vi tri dong khi khoi dong
+  servo1.setPeriodHertz(50);
+  servo1.attach(SERVO_PIN_1, 500, 2400);
   servo1.write(SERVO_CLOSE_DEG);
-  servo2.write(SERVO_CLOSE_DEG);
+  delay(500);
+  servo1.detach();
 
+  servo2.setPeriodHertz(50);
+  servo2.attach(SERVO_PIN_2, 500, 2400);
+  servo2.write(SERVO_CLOSE_DEG);
+  delay(500);
+  servo2.detach();
+
+  Serial.println("Servo initialized.");
   connectWiFi();
 }
 
@@ -133,13 +167,13 @@ void loop() {
   String action1;
   int cmdId1 = getPendingCommand(LOCKER_ID_1, action1);
   if (cmdId1 != -1 && (action1 == "open" || action1 == "return")) {
-    executeOpenCommand(servo1, cmdId1, LOCKER_ID_1);
+    executeOpenCommand(SERVO_PIN_1, servo1, cmdId1, LOCKER_ID_1);
   }
 
   String action2;
   int cmdId2 = getPendingCommand(LOCKER_ID_2, action2);
   if (cmdId2 != -1 && (action2 == "open" || action2 == "return")) {
-    executeOpenCommand(servo2, cmdId2, LOCKER_ID_2);
+    executeOpenCommand(SERVO_PIN_2, servo2, cmdId2, LOCKER_ID_2);
   }
 
   delay(POLL_INTERVAL_MS);

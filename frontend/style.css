@@ -348,6 +348,12 @@ body {
   border-color: rgba(239,68,68,0.3);
 }
 
+.locker-card.returning {
+  background: linear-gradient(145deg, #d97706, #b45309);
+  box-shadow: 0 12px 32px rgba(217,119,6,0.3);
+  border-color: rgba(251,191,36,0.3);
+}
+
 .locker-icon {
   font-size: 2rem;
   margin-bottom: 10px;

@@ -87,10 +87,31 @@ function setupLoginPage() {
 async function setupDashboardPage() {
   let lockers = await api.get("/api/lockers").then(r => r.data);
   let selectedId = null;
+  const returningIds = new Set(); // Tủ đang chờ ESP32 đóng
+  const watcherTimers = {};       // Timer poll cho từng tủ đang returning
 
-  const grid     = document.getElementById("lockerGrid");
+  const grid        = document.getElementById("lockerGrid");
   const rentModal   = document.getElementById("rentModal");
   const returnModal = document.getElementById("returnModal");
+
+  // Poll server mỗi 3s cho đến khi tủ lockerId về "available"
+  function startReturnWatcher(lockerId) {
+    if (watcherTimers[lockerId]) return; // đã có watcher rồi
+    watcherTimers[lockerId] = setInterval(async () => {
+      try {
+        const fresh = await api.get("/api/lockers").then(r => r.data);
+        const locker = fresh.find(l => l.id === lockerId);
+        if (locker?.status === "available") {
+          clearInterval(watcherTimers[lockerId]);
+          delete watcherTimers[lockerId];
+          returningIds.delete(lockerId);
+          lockers = fresh;
+          render();
+          toast(`${locker.name} đã trả thành công!`, "success");
+        }
+      } catch { /* bỏ qua lỗi mạng, thử lại lần sau */ }
+    }, 3000);
+  }
 
   function render() {
     const avail = lockers.filter(l => l.status === "available").length;
@@ -99,15 +120,19 @@ async function setupDashboardPage() {
     document.getElementById("occupiedLockers").textContent  = lockers.length - avail;
 
     grid.innerHTML = lockers.map(l => {
-      const isAvail = l.status === "available";
+      const isAvail   = l.status === "available";
+      const returning = returningIds.has(l.id);
+      const cardClass = isAvail ? "available" : (returning ? "returning" : "occupied");
       return `
-        <div class="locker-card ${isAvail ? "available" : "occupied"}">
+        <div class="locker-card ${cardClass}">
           <span class="locker-icon">${isAvail ? "🔓" : "🔒"}</span>
           <span class="locker-number">${l.name}</span>
-          <span class="locker-status">${isAvail ? "Đang trống" : "Đang sử dụng"}</span>
+          <span class="locker-status">${isAvail ? "Đang trống" : returning ? "Đang mở để lấy đồ..." : "Đang sử dụng"}</span>
           ${isAvail
             ? `<button class="btn-action btn-rent" data-id="${l.id}">+ Thuê tủ</button>`
-            : `<button class="btn-action btn-return" data-id="${l.id}">↩ Trả tủ</button>`
+            : returning
+              ? `<button class="btn-action" disabled>⏳ Đang xử lý...</button>`
+              : `<button class="btn-action btn-return" data-id="${l.id}">↩ Trả tủ</button>`
           }
         </div>`;
     }).join("");
@@ -155,7 +180,10 @@ async function setupDashboardPage() {
     setLoading(returnConfirm, true, "Đang xử lý...");
     try {
       await api.post("/api/lockers/return", { lockerId: selectedId });
+      returningIds.add(selectedId);
       hideModal(returnModal);
+      render();
+      startReturnWatcher(selectedId);
       toast("Tủ đang mở, vui lòng lấy đồ ra. Tủ sẽ tự đóng sau 15 giây.", "success");
     } catch (err) {
       toast(err.message, "error");
