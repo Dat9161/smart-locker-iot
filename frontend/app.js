@@ -87,8 +87,8 @@ function setupLoginPage() {
 async function setupDashboardPage() {
   let lockers = await api.get("/api/lockers").then(r => r.data);
   let selectedId = null;
-  const returningIds = new Set(); // Tủ đang chờ ESP32 đóng
-  const watcherTimers = {};       // Timer poll cho từng tủ đang returning
+  const returningIds = new Set();
+  const watcherTimers = {};
 
   const grid        = document.getElementById("lockerGrid");
   const rentModal   = document.getElementById("rentModal");
@@ -141,6 +141,7 @@ async function setupDashboardPage() {
       btn.addEventListener("click", () => {
         selectedId = Number(btn.dataset.id);
         document.getElementById("rentLockerName").textContent = lockers.find(l => l.id === selectedId)?.name;
+        document.getElementById("rentPinInput").value = "";
         showModal(rentModal);
       })
     );
@@ -149,6 +150,7 @@ async function setupDashboardPage() {
       btn.addEventListener("click", () => {
         selectedId = Number(btn.dataset.id);
         document.getElementById("returnLockerName").textContent = lockers.find(l => l.id === selectedId)?.name;
+        document.getElementById("returnPinInput").value = "";
         showModal(returnModal);
       })
     );
@@ -157,15 +159,24 @@ async function setupDashboardPage() {
   render();
 
   // Rent
-  document.getElementById("rentCancelBtn").addEventListener("click", () => hideModal(rentModal));
+  document.getElementById("rentCancelBtn").addEventListener("click", () => {
+    hideModal(rentModal);
+    document.getElementById("rentPinInput").value = "";
+  });
   const rentConfirm = document.getElementById("rentConfirmBtn");
   rentConfirm.addEventListener("click", async () => {
+    const pin = document.getElementById("rentPinInput").value.trim();
+    if (!/^\d{4,6}$/.test(pin)) {
+      toast("PIN phải là 4-6 chữ số.", "error"); return;
+    }
     setLoading(rentConfirm, true, "Đang xử lý...");
     try {
-      await api.post("/api/lockers/rent", { lockerId: selectedId });
+      await api.post("/api/lockers/rent", { lockerId: selectedId, pin });
       lockers = lockers.map(l => l.id === selectedId ? { ...l, status: "occupied" } : l);
-      hideModal(rentModal); render();
-      toast("Thuê tủ thành công! Tủ đang mở, vui lòng ra tủ.", "success");
+      hideModal(rentModal);
+      document.getElementById("rentPinInput").value = "";
+      render();
+      toast("Thuê tủ thành công! Nhập PIN để mở tủ.", "success");
     } catch (err) {
       toast(err.message, "error");
     } finally {
@@ -173,18 +184,26 @@ async function setupDashboardPage() {
     }
   });
 
-  // Return
-  document.getElementById("returnCancelBtn").addEventListener("click", () => hideModal(returnModal));
+  // Return — nhập PIN để trả tủ
+  document.getElementById("returnCancelBtn").addEventListener("click", () => {
+    hideModal(returnModal);
+    document.getElementById("returnPinInput").value = "";
+  });
   const returnConfirm = document.getElementById("returnConfirmBtn");
   returnConfirm.addEventListener("click", async () => {
+    const pin = document.getElementById("returnPinInput").value.trim();
+    if (!/^\d{4,6}$/.test(pin)) {
+      toast("PIN phải là 4-6 chữ số.", "error"); return;
+    }
     setLoading(returnConfirm, true, "Đang xử lý...");
     try {
-      await api.post("/api/lockers/return", { lockerId: selectedId });
+      await api.post("/api/lockers/return", { lockerId: selectedId, pin });
       returningIds.add(selectedId);
       hideModal(returnModal);
+      document.getElementById("returnPinInput").value = "";
       render();
       startReturnWatcher(selectedId);
-      toast("Tủ đang mở, vui lòng lấy đồ ra. Tủ sẽ tự đóng sau 15 giây.", "success");
+      toast("PIN đúng! Tủ đang mở, vui lòng lấy đồ ra.", "success");
     } catch (err) {
       toast(err.message, "error");
     } finally {

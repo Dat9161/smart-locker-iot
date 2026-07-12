@@ -59,8 +59,11 @@
   <!-- Modal thuê tủ -->
   <div class="modal-overlay" id="rentModal">
     <div class="modal-box">
-      <h5>Xác nhận thuê tủ</h5>
-      <p>Bạn muốn thuê <strong id="rentLockerName"></strong>? Tủ sẽ tự mở trong vài giây.</p>
+      <h5>Thuê tủ</h5>
+      <p>Bạn muốn thuê <strong id="rentLockerName"></strong>?</p>
+      <p style="color:var(--muted);font-size:0.85rem;margin-bottom:12px">Đặt mã PIN (4-6 chữ số) để mở tủ sau khi thuê.</p>
+      <input type="password" inputmode="numeric" maxlength="6" placeholder="Nhập PIN (4-6 số)"
+             id="rentPinInput" class="pin-input" autocomplete="off" />
       <div class="modal-actions">
         <button class="btn-cancel" id="rentCancelBtn">Hủy</button>
         <button class="btn-confirm green" id="rentConfirmBtn">Thuê tủ</button>
@@ -68,11 +71,15 @@
     </div>
   </div>
 
+
   <!-- Modal trả tủ -->
   <div class="modal-overlay" id="returnModal">
     <div class="modal-box">
-      <h5>Xác nhận trả tủ</h5>
-      <p>Bạn muốn trả <strong id="returnLockerName"></strong>? Tủ sẽ mở để bạn lấy đồ ra, sau đó tự đóng.</p>
+      <h5>Trả tủ</h5>
+      <p>Nhập PIN để xác nhận trả <strong id="returnLockerName"></strong>.</p>
+      <p style="color:var(--muted);font-size:0.85rem;margin-bottom:12px">Tủ sẽ mở để bạn lấy đồ ra, sau đó tự đóng.</p>
+      <input type="password" inputmode="numeric" maxlength="6" placeholder="Nhập PIN"
+             id="returnPinInput" class="pin-input" autocomplete="off" />
       <div class="modal-actions">
         <button class="btn-cancel" id="returnCancelBtn">Hủy</button>
         <button class="btn-confirm red" id="returnConfirmBtn">Trả tủ</button>

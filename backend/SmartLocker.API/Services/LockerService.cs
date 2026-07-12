@@ -14,7 +14,8 @@ public class LockerService(AppDbContext db) : ILockerService
             .ToListAsync();
     }
 
-    public async Task<(bool Success, string Message)> RentAsync(int lockerId, int userId)
+    // Thuê tủ: lưu PIN + tạo lệnh open ngay → servo mở
+    public async Task<(bool Success, string Message)> RentAsync(int lockerId, int userId, string pin)
     {
         var locker = await db.Lockers.FindAsync(lockerId);
         if (locker == null)
@@ -22,22 +23,27 @@ public class LockerService(AppDbContext db) : ILockerService
         if (locker.Status != "available")
             return (false, "Tủ đang được sử dụng.");
 
-        // Tạo command mở tủ
-        var command = new Command { LockerId = lockerId, Action = "open", Status = "pending" };
-        db.Commands.Add(command);
+        // Lưu PIN vào lịch sử thuê
+        db.RentalHistories.Add(new RentalHistory
+        {
+            UserId   = userId,
+            LockerId = lockerId,
+            PinCode  = pin,
+            Status   = "active"
+        });
 
-        // Cập nhật trạng thái tủ
-        locker.Status = "occupied";
+        // Tạo lệnh mở tủ ngay cho ESP32
+        db.Commands.Add(new Command { LockerId = lockerId, Action = "open", Status = "pending" });
+
+        locker.Status    = "occupied";
         locker.UpdatedAt = DateTime.UtcNow;
 
-        // Ghi lịch sử thuê
-        db.RentalHistories.Add(new RentalHistory { UserId = userId, LockerId = lockerId });
-
         await db.SaveChangesAsync();
-        return (true, "Thuê tủ thành công.");
+        return (true, "Thuê tủ thành công! Tủ đang mở.");
     }
 
-    public async Task<(bool Success, string Message)> ReturnAsync(int lockerId, int userId)
+    // Trả tủ: yêu cầu đúng PIN → tạo lệnh return → servo mở để lấy đồ
+    public async Task<(bool Success, string Message)> ReturnWithPinAsync(int lockerId, int userId, string pin)
     {
         var locker = await db.Lockers.FindAsync(lockerId);
         if (locker == null)
@@ -45,11 +51,23 @@ public class LockerService(AppDbContext db) : ILockerService
         if (locker.Status != "occupied")
             return (false, "Tủ này chưa được thuê.");
 
-        // Tạo lệnh mở tủ để người dùng lấy đồ ra (action "return" để phân biệt với lệnh thuê)
-        db.Commands.Add(new Command { LockerId = lockerId, Action = "return", Status = "pending" });
+        // Xác minh PIN của lần thuê đang active
+        var rental = await db.RentalHistories
+            .Where(r => r.LockerId == lockerId && r.UserId == userId && r.Status == "active")
+            .OrderByDescending(r => r.RentedAt)
+            .FirstOrDefaultAsync();
 
+        if (rental == null)
+            return (false, "Bạn chưa thuê tủ này.");
+
+        if (rental.PinCode != pin)
+            return (false, "PIN không đúng.");
+
+        // PIN đúng → tạo lệnh return cho ESP32
+        db.Commands.Add(new Command { LockerId = lockerId, Action = "return", Status = "pending" });
         await db.SaveChangesAsync();
-        return (true, "Tủ đang mở, vui lòng lấy đồ ra.");
+
+        return (true, "PIN đúng! Tủ đang mở, vui lòng lấy đồ ra.");
     }
 
     public async Task<List<RentalHistoryDto>> GetHistoryAsync(int userId)
@@ -60,11 +78,11 @@ public class LockerService(AppDbContext db) : ILockerService
             .OrderByDescending(r => r.RentedAt)
             .Select(r => new RentalHistoryDto
             {
-                Id = r.Id,
+                Id         = r.Id,
                 LockerName = r.Locker.Name,
-                RentedAt = r.RentedAt,
+                RentedAt   = r.RentedAt,
                 ReturnedAt = r.ReturnedAt,
-                Status = r.Status
+                Status     = r.Status
             })
             .ToListAsync();
     }

@@ -18,11 +18,12 @@ public class LockersController(ILockerService lockerService) : ControllerBase
         return Ok(new { success = true, data = lockers });
     }
 
+    // Thuê tủ + nhập PIN → servo mở ngay
     [HttpPost("rent")]
     public async Task<IActionResult> Rent([FromBody] RentRequest request)
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var (success, message) = await lockerService.RentAsync(request.LockerId, userId);
+        var (success, message) = await lockerService.RentAsync(request.LockerId, userId, request.Pin);
 
         if (!success)
             return BadRequest(new { success = false, message });
@@ -30,11 +31,12 @@ public class LockersController(ILockerService lockerService) : ControllerBase
         return Ok(new { success = true, message });
     }
 
+    // Trả tủ: nhập PIN → xác minh → servo mở để lấy đồ
     [HttpPost("return")]
-    public async Task<IActionResult> Return([FromBody] RentRequest request)
+    public async Task<IActionResult> Return([FromBody] OpenRequest request)
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var (success, message) = await lockerService.ReturnAsync(request.LockerId, userId);
+        var (success, message) = await lockerService.ReturnWithPinAsync(request.LockerId, userId, request.Pin);
 
         if (!success)
             return BadRequest(new { success = false, message });

@@ -36,6 +36,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<RentalHistory>(e =>
         {
             e.Property(r => r.Status).HasMaxLength(20).HasDefaultValue("active");
+            e.Property(r => r.PinCode).HasMaxLength(6).HasDefaultValue("");
             e.HasOne(r => r.User).WithMany(u => u.RentalHistories).HasForeignKey(r => r.UserId);
             e.HasOne(r => r.Locker).WithMany(l => l.RentalHistories).HasForeignKey(r => r.LockerId);
         });

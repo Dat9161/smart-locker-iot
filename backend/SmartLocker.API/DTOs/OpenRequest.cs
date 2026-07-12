@@ -2,11 +2,10 @@ using System.ComponentModel.DataAnnotations;
 
 namespace SmartLocker.API.DTOs;
 
-public class RentRequest
+public class OpenRequest
 {
     [Required] public int LockerId { get; set; }
 
-    // PIN 4-6 chữ số, bắt buộc khi thuê tủ
     [Required]
     [RegularExpression(@"^\d{4,6}$", ErrorMessage = "PIN phải là 4-6 chữ số.")]
     public string Pin { get; set; } = string.Empty;
